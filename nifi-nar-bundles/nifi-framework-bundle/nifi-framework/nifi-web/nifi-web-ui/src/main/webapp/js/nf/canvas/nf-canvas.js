@@ -21,15 +21,15 @@ $(document).ready(function () {
     if (nf.Canvas.SUPPORTS_SVG) {
 
         //Create Angular App
-        var app = angular.module('ngCanvasApp', ['ngResource', 'ngRoute', 'ngMaterial', 'ngSanitize', 'ngMessages']);
+        var app = angular.module('ngCanvasApp', ['ngResource', 'ngRoute', 'ngMaterial', 'ngMessages']);
 
         //Define Dependency Injection Annotations
         nf.ng.AppConfig.$inject = ['$mdThemingProvider', '$compileProvider'];
         nf.ng.AppCtrl.$inject = ['$scope', 'serviceProvider', '$compile', 'headerCtrl', 'graphControlsCtrl'];
         nf.ng.ServiceProvider.$inject = [];
-        nf.ng.BreadcrumbsCtrl.$inject = ['serviceProvider', '$sanitize'];
+        nf.ng.BreadcrumbsCtrl.$inject = ['serviceProvider'];
         nf.ng.Canvas.HeaderCtrl.$inject = ['serviceProvider', 'toolboxCtrl', 'globalMenuCtrl', 'flowStatusCtrl'];
-        nf.ng.Canvas.FlowStatusCtrl.$inject = ['serviceProvider', '$sanitize'];
+        nf.ng.Canvas.FlowStatusCtrl.$inject = ['serviceProvider'];
         nf.ng.Canvas.GlobalMenuCtrl.$inject = ['serviceProvider'];
         nf.ng.Canvas.ToolboxCtrl.$inject = ['processorComponent',
             'inputPortComponent',
@@ -615,6 +615,8 @@ nf.Canvas = (function () {
      * @argument {object} options               Configuration options
      */
     var reloadProcessGroup = function (processGroupId, options) {
+        var now = new Date().getTime();
+
         // load the controller
         return $.ajax({
             type: 'GET',
@@ -654,6 +656,7 @@ nf.Canvas = (function () {
             }
 
             // refresh the graph
+            nf.Graph.expireCaches(now);
             nf.Graph.set(processGroupFlow.flow, $.extend({
                 'selectAll': false
             }, options));
