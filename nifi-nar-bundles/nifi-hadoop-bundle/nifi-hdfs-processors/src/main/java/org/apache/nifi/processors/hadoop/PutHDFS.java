@@ -31,6 +31,7 @@ import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.SeeAlso;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.PropertyValue;
 import org.apache.nifi.components.ValidationContext;
@@ -77,6 +78,16 @@ public class PutHDFS extends AbstractHadoopProcessor {
     public static final String REPLACE_RESOLUTION = "replace";
     public static final String IGNORE_RESOLUTION = "ignore";
     public static final String FAIL_RESOLUTION = "fail";
+    public static final String APPEND_RESOLUTION = "append";
+
+    public static final AllowableValue REPLACE_RESOLUTION_AV = new AllowableValue(REPLACE_RESOLUTION,
+            REPLACE_RESOLUTION, "Replaces the existing file if any.");
+    public static final AllowableValue IGNORE_RESOLUTION_AV = new AllowableValue(IGNORE_RESOLUTION, IGNORE_RESOLUTION,
+            "Ignores the flow file and routes it to success.");
+    public static final AllowableValue FAIL_RESOLUTION_AV = new AllowableValue(FAIL_RESOLUTION, FAIL_RESOLUTION,
+            "Penalizes the flow file and routes it to failure.");
+    public static final AllowableValue APPEND_RESOLUTION_AV = new AllowableValue(APPEND_RESOLUTION, APPEND_RESOLUTION,
+            "Appends to the existing file if any, creates a new file otherwise.");
 
     public static final String BUFFER_SIZE_KEY = "io.file.buffer.size";
     public static final int BUFFER_SIZE_DEFAULT = 4096;
@@ -101,8 +112,8 @@ public class PutHDFS extends AbstractHadoopProcessor {
             .name("Conflict Resolution Strategy")
             .description("Indicates what should happen when a file with the same name already exists in the output directory")
             .required(true)
-            .defaultValue(FAIL_RESOLUTION)
-            .allowableValues(REPLACE_RESOLUTION, IGNORE_RESOLUTION, FAIL_RESOLUTION)
+.defaultValue(FAIL_RESOLUTION_AV.getValue())
+            .allowableValues(REPLACE_RESOLUTION_AV, IGNORE_RESOLUTION_AV, FAIL_RESOLUTION_AV, APPEND_RESOLUTION_AV)
             .build();
 
     public static final PropertyDescriptor BLOCK_SIZE = new PropertyDescriptor.Builder()
@@ -246,21 +257,23 @@ public class PutHDFS extends AbstractHadoopProcessor {
                 changeOwner(context, hdfs, configuredRootDirPath);
             }
 
+            final boolean destinationExists = hdfs.exists(copyFile);
+
             // If destination file already exists, resolve that based on processor configuration
-            if (hdfs.exists(copyFile)) {
+            if (destinationExists) {
                 switch (conflictResponse) {
-                    case REPLACE_RESOLUTION:
+                case REPLACE_RESOLUTION:
                         if (hdfs.delete(copyFile, false)) {
                             getLogger().info("deleted {} in order to replace with the contents of {}",
                                     new Object[]{copyFile, flowFile});
                         }
                         break;
-                    case IGNORE_RESOLUTION:
+                case IGNORE_RESOLUTION:
                         session.transfer(flowFile, REL_SUCCESS);
                         getLogger().info("transferring {} to success because file with same name already exists",
                                 new Object[]{flowFile});
                         return;
-                    case FAIL_RESOLUTION:
+                case FAIL_RESOLUTION:
                         flowFile = session.penalize(flowFile);
                         session.transfer(flowFile, REL_FAILURE);
                         getLogger().warn("penalizing {} and routing to failure because file with same name already exists",
@@ -280,7 +293,11 @@ public class PutHDFS extends AbstractHadoopProcessor {
                     OutputStream fos = null;
                     Path createdFile = null;
                     try {
-                        fos = hdfs.create(tempCopyFile, true, bufferSize, replication, blockSize);
+                        if (conflictResponse.equals(APPEND_RESOLUTION_AV.getValue()) && destinationExists) {
+                            fos = hdfs.append(copyFile, bufferSize);
+                        } else {
+                            fos = hdfs.create(tempCopyFile, true, bufferSize, replication, blockSize);
+                        }
                         if (codec != null) {
                             fos = codec.createOutputStream(fos);
                         }
@@ -315,21 +332,24 @@ public class PutHDFS extends AbstractHadoopProcessor {
             final long millis = stopWatch.getDuration(TimeUnit.MILLISECONDS);
             tempDotCopyFile = tempCopyFile;
 
-            boolean renamed = false;
-            for (int i = 0; i < 10; i++) { // try to rename multiple times.
-                if (hdfs.rename(tempCopyFile, copyFile)) {
-                    renamed = true;
-                    break;// rename was successful
+            if (!conflictResponse.equals(APPEND_RESOLUTION_AV.getValue())
+                    || (conflictResponse.equals(APPEND_RESOLUTION_AV.getValue()) && !destinationExists)) {
+                boolean renamed = false;
+                for (int i = 0; i < 10; i++) { // try to rename multiple times.
+                    if (hdfs.rename(tempCopyFile, copyFile)) {
+                        renamed = true;
+                        break;// rename was successful
+                    }
+                    Thread.sleep(200L);// try waiting to let whatever might cause rename failure to resolve
                 }
-                Thread.sleep(200L);// try waiting to let whatever might cause rename failure to resolve
-            }
-            if (!renamed) {
-                hdfs.delete(tempCopyFile, false);
-                throw new ProcessException("Copied file to HDFS but could not rename dot file " + tempCopyFile
-                        + " to its final filename");
-            }
+                if (!renamed) {
+                    hdfs.delete(tempCopyFile, false);
+                    throw new ProcessException("Copied file to HDFS but could not rename dot file " + tempCopyFile
+                            + " to its final filename");
+                }
 
-            changeOwner(context, hdfs, copyFile);
+                changeOwner(context, hdfs, copyFile);
+            }
 
             getLogger().info("copied {} to HDFS at {} in {} milliseconds at a rate of {}",
                     new Object[]{flowFile, copyFile, millis, dataRate});

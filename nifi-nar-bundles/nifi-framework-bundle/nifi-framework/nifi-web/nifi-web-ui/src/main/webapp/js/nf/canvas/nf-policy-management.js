@@ -40,9 +40,9 @@ nf.PolicyManagement = (function () {
 
         $('#search-users-dialog').modal({
             scrollableContentStyle: 'scrollable',
-            headerText: 'Search users',
+            headerText: 'Add Users/Groups',
             buttons: [{
-                buttonText: 'Ok',
+                buttonText: 'Add',
                 color: {
                     base: '#728E9B',
                     hover: '#004849',
@@ -516,9 +516,8 @@ nf.PolicyManagement = (function () {
 
             // see if the user has permissions for the current policy
             var currentEntity = $('#policy-table').data('policy');
-            var resourceComponentId = nf.Common.substringAfterLast(currentEntity.component.resource, '/');
-            var selectedComponentId = $('#selected-policy-component-id').text();
-            if (currentEntity.permissions.canWrite === true && resourceComponentId === selectedComponentId) {
+            var isPolicyEditable = $('#delete-policy-button').is(':disabled') === false;
+            if (currentEntity.permissions.canWrite === true && isPolicyEditable) {
                 markup += '<div title="Remove" class="pointer delete-user fa fa-trash"></div>';
             }
 
@@ -668,8 +667,10 @@ nf.PolicyManagement = (function () {
      */
     var promptToDeletePolicy = function () {
         nf.Dialog.showYesNoDialog({
-            headerText: 'Update Policy',
-            dialogContent: 'Are you sure you want to delete this policy?',
+            headerText: 'Delete Policy',
+            dialogContent: 'By deleting this policy, the permissions for this component will revert to the inherited policy.',
+            yesText: 'Delete',
+            noText: 'Cancel',
             yesHandler: function () {
                 deletePolicy();
             }
@@ -696,7 +697,7 @@ nf.PolicyManagement = (function () {
             });
         } else {
             nf.Dialog.showOkDialog({
-                headerText: 'Update Policy',
+                headerText: 'Delete Policy',
                 dialogContent: 'No policy selected'
             });
         }
@@ -785,8 +786,16 @@ nf.PolicyManagement = (function () {
 
             // build the mark up
             return $('<span>Showing effective policy inherited from Process Group </span>').append($('<span class="link"></span>').text(processGroupName).on('click', function () {
+                // close the shell
                 $('#shell-close-button').click();
-                nf.CanvasUtils.enterGroup(processGroupId);
+
+                // load the correct group and unselect everything if necessary
+                nf.CanvasUtils.enterGroup(processGroupId).done(function () {
+                    nf.CanvasUtils.getSelection().classed('selected', false);
+
+                    // inform Angular app that values have changed
+                    nf.ng.Bridge.digest();
+                });
             })).append('<span>.</span>');
         }
     };

@@ -385,6 +385,20 @@ nf.Common = (function () {
         },
 
         /**
+         * Determines the contrast color of a given hex color.
+         *
+         * @param {string} hex  The hex color to test.
+         * @returns {string} The contrasting color string.
+         */
+        determineContrastColor: function (hex){
+            if (parseInt(hex, 16) > 0xffffff/1.5) {
+                return '#000000';
+            }
+            return '#ffffff';
+        },
+
+
+        /**
          * Method for handling ajax errors.
          * 
          * @argument {object} xhr       The XmlHttpRequest
@@ -546,9 +560,9 @@ nf.Common = (function () {
          */
         populateField: function (target, value) {
             if (nf.Common.isUndefined(value) || nf.Common.isNull(value)) {
-                return $('#' + target).addClass('unset').text('No value previously set');
+                return $('#' + target).addClass('unset').text('No value set');
             } else if (value === '') {
-                return $('#' + target).addClass('blank').text('Empty string previously set');
+                return $('#' + target).addClass('blank').text('Empty string set');
             } else {
                 return $('#' + target).text(value);
             }

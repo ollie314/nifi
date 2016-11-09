@@ -14,31 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.nifi.processor.util;
+package org.apache.nifi.test.processors;
 
-import org.apache.nifi.flowfile.FlowFile;
+import org.apache.nifi.annotation.behavior.RequiresInstanceClassLoading;
+import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.processor.AbstractProcessor;
+import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
+import org.apache.nifi.processor.exception.ProcessException;
 
-public class FlowFileSessionWrapper {
+import java.util.List;
 
-    private final FlowFile flowFile;
-    private final ProcessSession session;
+@RequiresInstanceClassLoading
+public class ModifiesClasspathProcessor extends AbstractProcessor {
 
-    public FlowFileSessionWrapper(final FlowFile flowFile, final ProcessSession session) {
-        this.flowFile = flowFile;
-        this.session = session;
+    private List<PropertyDescriptor> properties;
+
+    public ModifiesClasspathProcessor() {
+
     }
 
-    public FlowFile getFlowFile() {
-        return flowFile;
-    }
-
-    public ProcessSession getSession() {
-        return session;
+    public ModifiesClasspathProcessor(List<PropertyDescriptor> properties) {
+        this.properties = properties;
     }
 
     @Override
-    public String toString() {
-        return flowFile.toString();
+    protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
+        return properties;
     }
+
+    @Override
+    public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
+    }
+
 }
